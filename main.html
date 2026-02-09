@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncCode - Coding Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>Sync<span class="accent">Code</span></h1>
+            </div>
+            <p class="tagline">Your Unified Coding Dashboard</p>
+        </header>
+
+        <!-- Search Section -->
+        <div class="search-section">
+            <div class="input-group">
+                <label>🟡 LeetCode</label>
+                <input type="text" id="lcUsername" placeholder="LeetCode username" value="8UAkiuj84c">
+            </div>
+            <div class="input-group">
+                <label>🟢 GeeksforGeeks</label>
+                <input type="text" id="gfgHandle" placeholder="GFG handle" value="yash85">
+            </div>
+            <button id="fetchBtn" class="btn-primary">
+                <span class="btn-text">Fetch All</span>
+                <span class="btn-loader" style="display: none;">⏳</span>
+            </button>
+        </div>
+
+        <!-- Combined Stats Row -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <span class="stat-icon">📊</span>
+                <div class="stat-info">
+                    <span class="stat-value" id="totalSolved">--</span>
+                    <span class="stat-label">Total Solved</span>
+                </div>
+            </div>
+            <div class="stat-card lc">
+                <span class="stat-icon">🟡</span>
+                <div class="stat-info">
+                    <span class="stat-value" id="lcCount">--</span>
+                    <span class="stat-label">LeetCode</span>
+                </div>
+            </div>
+            <div class="stat-card gfg">
+                <span class="stat-icon">🟢</span>
+                <div class="stat-info">
+                    <span class="stat-value" id="gfgCount">--</span>
+                    <span class="stat-label">GFG</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="dashboard-grid">
+            <!-- Left: Combined Languages -->
+            <div class="chart-section">
+                <h2 class="section-title"><span>💻</span> Languages (Combined)</h2>
+                <div class="language-bars" id="languageBars">
+                    <div class="empty-state small"><span class="empty-icon">🎯</span></div>
+                </div>
+            </div>
+
+            <!-- Right: Combined Submissions -->
+            <div class="submissions-section">
+                <h2 class="section-title"><span>📝</span> Recent Submissions</h2>
+                <div class="submissions-list" id="combinedSubmissions">
+                    <div class="empty-state"><span class="empty-icon">🎯</span>
+                        <p>Click "Fetch All"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Insights Section -->
+        <div class="ai-insights-section" id="aiInsights">
+            <div class="ai-header">
+                <h2 class="section-title"><span>🤖</span> AI Performance Analysis</h2>
+                <button id="analyzeBtn" class="btn-ai">
+                    <span class="btn-text">✨ Get AI Insights</span>
+                    <span class="btn-loader" style="display: none;">🔄</span>
+                </button>
+            </div>
+            <div class="ai-content" id="aiContent">
+                <div class="ai-empty-state">
+                    <span class="ai-icon">🧠</span>
+                    <p>Click "Get AI Insights" after fetching your data</p>
+                    <p class="ai-subtext">Powered by Backboard.io AI</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Multi-Platform Coding Dashboard</p>
+        </footer>
+    </div>
+
+    <script src="index.js"></script>
+    <script>
+        const fetchBtn = document.getElementById('fetchBtn');
+        const lcUsername = document.getElementById('lcUsername');
+        const gfgHandle = document.getElementById('gfgHandle');
+        const combinedSubmissions = document.getElementById('combinedSubmissions');
+        const languageBars = document.getElementById('languageBars');
+        const totalSolvedEl = document.getElementById('totalSolved');
+        const lcCountEl = document.getElementById('lcCount');
+        const gfgCountEl = document.getElementById('gfgCount');
+
+        fetchBtn.addEventListener('click', async () => {
+            fetchBtn.querySelector('.btn-text').style.display = 'none';
+            fetchBtn.querySelector('.btn-loader').style.display = 'inline';
+
+            combinedSubmissions.innerHTML = '<div class="loading"><span class="spinner"></span> Loading...</div>';
+            languageBars.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+
+            let allSubmissions = [];
+            let lcTotal = 0, gfgTotal = 0;
+            let combinedLanguages = {};
+
+            // Fetch LeetCode
+            const lcUser = lcUsername.value.trim();
+            if (lcUser) {
+                try {
+                    const [submissions, skillStats, languageStats] = await Promise.all([
+                        fetchLeetCodeRecentSubmissions(lcUser, 15),
+                        fetchLeetCodeSkillStats(lcUser),
+                        fetchLeetCodeLanguageStats(lcUser)
+                    ]);
+
+                    const { fundamental, intermediate, advanced } = skillStats;
+                    lcTotal = fundamental.reduce((s, t) => s + t.problemsSolved, 0) +
+                        intermediate.reduce((s, t) => s + t.problemsSolved, 0) +
+                        advanced.reduce((s, t) => s + t.problemsSolved, 0);
+
+                    languageStats.forEach(lang => {
+                        const name = lang.languageName.toLowerCase();
+                        combinedLanguages[name] = (combinedLanguages[name] || 0) + lang.problemsSolved;
+                    });
+
+                    submissions.forEach(sub => {
+                        allSubmissions.push({
+                            platform: 'leetcode',
+                            title: sub.title,
+                            timestamp: sub.timestamp * 1000,
+                            link: `https://leetcode.com/problems/${sub.titleSlug}`
+                        });
+                    });
+                } catch (error) {
+                    console.error('LC Error:', error);
+                }
+            }
+
+            // Fetch GFG
+            const gfgUser = gfgHandle.value.trim();
+            if (gfgUser) {
+                try {
+                    const gfgData = await fetchGFGSubmissions(gfgUser);
+                    gfgTotal = gfgData.count || 0;
+
+                    const gfgResult = gfgData.result || gfgData;
+                    const difficulties = ['School', 'Basic', 'Easy', 'Medium', 'Hard'];
+
+                    for (const diff of difficulties) {
+                        const diffData = gfgResult[diff];
+                        if (diffData && typeof diffData === 'object') {
+                            const problems = Object.values(diffData);
+
+                            problems.forEach(prob => {
+                                const lang = (prob.lang || 'unknown').toLowerCase();
+                                combinedLanguages[lang] = (combinedLanguages[lang] || 0) + 1;
+                            });
+
+                            problems.slice(0, 3).forEach(prob => {
+                                allSubmissions.push({
+                                    platform: 'gfg',
+                                    title: prob.pname || 'GFG Problem',
+                                    timestamp: Date.now() - Math.random() * 86400000 * 30,
+                                    link: `https://practice.geeksforgeeks.org/problems/${prob.slug}`
+                                });
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('GFG Error:', error);
+                }
+            }
+
+            // Update stats
+            lcCountEl.textContent = lcTotal;
+            gfgCountEl.textContent = gfgTotal;
+            totalSolvedEl.textContent = lcTotal + gfgTotal;
+
+            // Sort and render
+            allSubmissions.sort((a, b) => b.timestamp - a.timestamp);
+            renderCombinedSubmissions(allSubmissions.slice(0, 25));
+            renderLanguageBars(combinedLanguages);
+
+            fetchBtn.querySelector('.btn-text').style.display = 'inline';
+            fetchBtn.querySelector('.btn-loader').style.display = 'none';
+        });
+
+        function renderCombinedSubmissions(submissions) {
+            if (submissions.length === 0) {
+                combinedSubmissions.innerHTML = `<div class="empty-state"><p>No submissions found</p></div>`;
+                return;
+            }
+            const platformIcons = { leetcode: '🟡', gfg: '🟢' };
+            combinedSubmissions.innerHTML = submissions.map((sub, i) => `
+                <div class="submission-card ${sub.platform}" style="animation-delay: ${i * 0.03}s">
+                    <div class="platform-badge">${platformIcons[sub.platform]}</div>
+                    <div class="submission-info">
+                        <h3 class="submission-title">${sub.title}</h3>
+                        <span class="time">${getTimeAgo(new Date(sub.timestamp))}</span>
+                    </div>
+                    <a href="${sub.link}" target="_blank" class="view-btn">→</a>
+                </div>
+            `).join('');
+        }
+
+        function renderLanguageBars(languages) {
+            const sorted = Object.entries(languages)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 6);
+
+            if (sorted.length === 0) {
+                languageBars.innerHTML = `<div class="empty-state small"><p>No language data</p></div>`;
+                return;
+            }
+
+            const max = sorted[0].count;
+            const colors = ['#6366f1', '#00ff88', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
+
+            languageBars.innerHTML = sorted.map((l, i) => `
+                <div class="lang-bar-item">
+                    <div class="lang-bar-header">
+                        <span class="lang-name">${l.name}</span>
+                        <span class="lang-count">${l.count}</span>
+                    </div>
+                    <div class="lang-bar-track">
+                        <div class="lang-bar-fill" style="width:${(l.count / max) * 100}%;background:${colors[i % colors.length]}"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            const intervals = { year: 31536000, month: 2592000, week: 604800, day: 86400, hour: 3600, minute: 60 };
+            for (const [unit, secs] of Object.entries(intervals)) {
+                const interval = Math.floor(seconds / secs);
+                if (interval >= 1) return `${interval}${unit[0]} ago`;
+            }
+            return 'Just now';
+        }
+
+        // AI Analysis functionality
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const aiContent = document.getElementById('aiContent');
+
+        // Store current stats for AI analysis
+        let currentStats = {
+            totalSolved: 0,
+            leetcode: 0,
+            gfg: 0,
+            languages: '',
+            recentSubmissions: ''
+        };
+
+        // Update stats after fetching data
+        const originalFetchHandler = fetchBtn.onclick;
+        fetchBtn.addEventListener('click', () => {
+            // Stats will be updated after fetch completes
+            setTimeout(() => {
+                currentStats.totalSolved = parseInt(totalSolvedEl.textContent) || 0;
+                currentStats.leetcode = parseInt(lcCountEl.textContent) || 0;
+                currentStats.gfg = parseInt(gfgCountEl.textContent) || 0;
+
+                // Get languages from rendered bars
+                const langItems = document.querySelectorAll('.lang-bar-item');
+                const langs = [];
+                langItems.forEach(item => {
+                    const name = item.querySelector('.lang-name')?.textContent;
+                    const count = item.querySelector('.lang-count')?.textContent;
+                    if (name && count) langs.push(`${name}: ${count}`);
+                });
+                currentStats.languages = langs.join(', ') || 'Not available';
+
+                // Get recent submissions
+                const submissions = document.querySelectorAll('.submission-card');
+                const recentTitles = [];
+                submissions.forEach((sub, i) => {
+                    if (i < 5) {
+                        const title = sub.querySelector('.submission-title')?.textContent;
+                        if (title) recentTitles.push(title);
+                    }
+                });
+                currentStats.recentSubmissions = recentTitles.join(', ') || 'Not available';
+            }, 3000);
+        });
+
+        analyzeBtn.addEventListener('click', async () => {
+            if (currentStats.totalSolved === 0) {
+                aiContent.innerHTML = `
+                    <div class="ai-error">
+                        <span>⚠️</span>
+                        <p>Please fetch your data first by clicking "Fetch All"</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Show loading
+            analyzeBtn.querySelector('.btn-text').style.display = 'none';
+            analyzeBtn.querySelector('.btn-loader').style.display = 'inline';
+            analyzeBtn.disabled = true;
+
+            aiContent.innerHTML = `
+                <div class="ai-loading">
+                    <div class="ai-loading-spinner"></div>
+                    <p>Analyzing your coding journey...</p>
+                    <p class="ai-subtext">This may take a moment</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('http://localhost:3000/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stats: currentStats })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.analysis) {
+                    renderAIAnalysis(data.analysis);
+                } else {
+                    throw new Error(data.error || 'Analysis failed');
+                }
+            } catch (error) {
+                console.error('AI Analysis Error:', error);
+                aiContent.innerHTML = `
+                    <div class="ai-error">
+                        <span>❌</span>
+                        <p>Failed to get AI insights</p>
+                        <p class="ai-subtext">${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                analyzeBtn.querySelector('.btn-text').style.display = 'inline';
+                analyzeBtn.querySelector('.btn-loader').style.display = 'none';
+                analyzeBtn.disabled = false;
+            }
+        });
+
+        function renderAIAnalysis(analysis) {
+            const { summary, strengths, improvements, suggestions } = analysis;
+
+            aiContent.innerHTML = `
+                <div class="ai-result">
+                    <div class="ai-summary">
+                        <h3>📊 Performance Summary</h3>
+                        <p>${summary || 'Analysis complete!'}</p>
+                    </div>
+                    
+                    <div class="ai-grid">
+                        <div class="ai-card strengths">
+                            <h4>💪 Strengths</h4>
+                            <ul>
+                                ${(strengths || []).map(s => `<li>${s}</li>`).join('') || '<li>Keep practicing to identify strengths</li>'}
+                            </ul>
+                        </div>
+                        
+                        <div class="ai-card improvements">
+                            <h4>🎯 Areas to Improve</h4>
+                            <ul>
+                                ${(improvements || []).map(i => `<li>${i}</li>`).join('') || '<li>Continue to explore new topics</li>'}
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="ai-suggestions">
+                        <h4>💡 Suggestions</h4>
+                        <div class="suggestions-list">
+                            ${(suggestions || []).map((s, i) => `
+                                <div class="suggestion-item" style="animation-delay: ${i * 0.1}s">
+                                    <span class="suggestion-number">${i + 1}</span>
+                                    <p>${s}</p>
+                                </div>
+                            `).join('') || '<div class="suggestion-item"><p>Keep up the great work!</p></div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+
+</html>
