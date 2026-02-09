@@ -116,6 +116,47 @@
         const lcCountEl = document.getElementById('lcCount');
         const gfgCountEl = document.getElementById('gfgCount');
 
+        // Normalize language names to handle variations
+        function normalizeLang(lang) {
+            const normalized = (lang || 'unknown').toLowerCase().trim();
+            const langMap = {
+                'cpp': 'C++',
+                'c++': 'C++',
+                'c++14': 'C++',
+                'c++17': 'C++',
+                'c++20': 'C++',
+                'python': 'Python',
+                'python3': 'Python',
+                'python2': 'Python',
+                'java': 'Java',
+                'javascript': 'JavaScript',
+                'js': 'JavaScript',
+                'typescript': 'TypeScript',
+                'ts': 'TypeScript',
+                'c': 'C',
+                'csharp': 'C#',
+                'c#': 'C#',
+                'go': 'Go',
+                'golang': 'Go',
+                'rust': 'Rust',
+                'ruby': 'Ruby',
+                'swift': 'Swift',
+                'kotlin': 'Kotlin',
+                'scala': 'Scala',
+                'php': 'PHP',
+                'sql': 'SQL',
+                'mysql': 'SQL',
+                'postgresql': 'SQL',
+                'r': 'R',
+                'dart': 'Dart',
+                'elixir': 'Elixir',
+                'erlang': 'Erlang',
+                'racket': 'Racket',
+                'unknown': 'Unknown'
+            };
+            return langMap[normalized] || lang.charAt(0).toUpperCase() + lang.slice(1).toLowerCase();
+        }
+
         fetchBtn.addEventListener('click', async () => {
             fetchBtn.querySelector('.btn-text').style.display = 'none';
             fetchBtn.querySelector('.btn-loader').style.display = 'inline';
@@ -131,19 +172,16 @@
             const lcUser = lcUsername.value.trim();
             if (lcUser) {
                 try {
-                    const [submissions, skillStats, languageStats] = await Promise.all([
+                    const [submissions, solvedCount, languageStats] = await Promise.all([
                         fetchLeetCodeRecentSubmissions(lcUser, 15),
-                        fetchLeetCodeSkillStats(lcUser),
+                        fetchLeetCodeSolvedCount(lcUser),
                         fetchLeetCodeLanguageStats(lcUser)
                     ]);
 
-                    const { fundamental, intermediate, advanced } = skillStats;
-                    lcTotal = fundamental.reduce((s, t) => s + t.problemsSolved, 0) +
-                        intermediate.reduce((s, t) => s + t.problemsSolved, 0) +
-                        advanced.reduce((s, t) => s + t.problemsSolved, 0);
+                    lcTotal = solvedCount;
 
                     languageStats.forEach(lang => {
-                        const name = lang.languageName.toLowerCase();
+                        const name = normalizeLang(lang.languageName);
                         combinedLanguages[name] = (combinedLanguages[name] || 0) + lang.problemsSolved;
                     });
 
@@ -152,7 +190,8 @@
                             platform: 'leetcode',
                             title: sub.title,
                             timestamp: sub.timestamp * 1000,
-                            link: `https://leetcode.com/problems/${sub.titleSlug}`
+                            link: `https://leetcode.com/problems/${sub.titleSlug}`,
+                            language: sub.lang || 'unknown'
                         });
                     });
                 } catch (error) {
@@ -176,7 +215,7 @@
                             const problems = Object.values(diffData);
 
                             problems.forEach(prob => {
-                                const lang = (prob.lang || 'unknown').toLowerCase();
+                                const lang = normalizeLang(prob.lang);
                                 combinedLanguages[lang] = (combinedLanguages[lang] || 0) + 1;
                             });
 
@@ -185,7 +224,8 @@
                                     platform: 'gfg',
                                     title: prob.pname || 'GFG Problem',
                                     timestamp: Date.now() - Math.random() * 86400000 * 30,
-                                    link: `https://practice.geeksforgeeks.org/problems/${prob.slug}`
+                                    link: `https://practice.geeksforgeeks.org/problems/${prob.slug}`,
+                                    language: prob.lang || 'unknown'
                                 });
                             });
                         }
@@ -215,16 +255,43 @@
                 return;
             }
             const platformIcons = { leetcode: '🟡', gfg: '🟢' };
-            combinedSubmissions.innerHTML = submissions.map((sub, i) => `
+            const langColors = {
+                'Python': '#3572A5',
+                'C++': '#f34b7d',
+                'C': '#555555',
+                'Java': '#b07219',
+                'JavaScript': '#f1e05a',
+                'TypeScript': '#2b7489',
+                'Go': '#00ADD8',
+                'Rust': '#dea584',
+                'Ruby': '#701516',
+                'Swift': '#ffac45',
+                'Kotlin': '#A97BFF',
+                'Scala': '#c22d40',
+                'PHP': '#4F5D95',
+                'C#': '#178600',
+                'SQL': '#e38c00',
+                'R': '#198CE7',
+                'Dart': '#00B4AB',
+                'Unknown': '#6366f1',
+                'default': '#6366f1'
+            };
+            combinedSubmissions.innerHTML = submissions.map((sub, i) => {
+                const langNormalized = normalizeLang(sub.language);
+                const langColor = langColors[langNormalized] || langColors['default'];
+                return `
                 <div class="submission-card ${sub.platform}" style="animation-delay: ${i * 0.03}s">
                     <div class="platform-badge">${platformIcons[sub.platform]}</div>
                     <div class="submission-info">
                         <h3 class="submission-title">${sub.title}</h3>
-                        <span class="time">${getTimeAgo(new Date(sub.timestamp))}</span>
+                        <div class="submission-meta">
+                            <span class="language-badge" style="background: ${langColor}">${langNormalized}</span>
+                            <span class="time">${getTimeAgo(new Date(sub.timestamp))}</span>
+                        </div>
                     </div>
                     <a href="${sub.link}" target="_blank" class="view-btn">→</a>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         function renderLanguageBars(languages) {

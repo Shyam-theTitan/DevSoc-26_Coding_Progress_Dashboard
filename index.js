@@ -16,6 +16,7 @@ async function fetchLeetCodeRecentSubmissions(username, limit = 15) {
                 title
                 titleSlug
                 timestamp
+                lang
             }
         }`
     };
@@ -100,6 +101,56 @@ async function fetchLeetCodeSkillStats(username) {
         return data.data.matchedUser.tagProblemCounts;
     } catch (error) {
         console.error('Error fetching skill stats:', error);
+        throw error;
+    }
+}
+
+// Fetch actual solved count (accurate total)
+async function fetchLeetCodeSolvedCount(username) {
+    const endpoint = 'http://localhost:3000/api/leetcode';
+
+    const query = {
+        operationName: "userProblemsSolved",
+        variables: {
+            username: username
+        },
+        query: `query userProblemsSolved($username: String!) {
+            matchedUser(username: $username) {
+                submitStatsGlobal {
+                    acSubmissionNum {
+                        difficulty
+                        count
+                    }
+                }
+            }
+        }`
+    };
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(query)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.errors) {
+            throw new Error(`GraphQL Error: ${data.errors[0].message}`);
+        }
+
+        // Find the "All" difficulty which gives total count
+        const stats = data.data.matchedUser.submitStatsGlobal.acSubmissionNum;
+        const allStats = stats.find(s => s.difficulty === 'All');
+        return allStats ? allStats.count : 0;
+    } catch (error) {
+        console.error('Error fetching solved count:', error);
         throw error;
     }
 }

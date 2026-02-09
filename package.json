@@ -2,6 +2,7 @@
   "name": "dev-soc-dashboard",
   "version": "1.0.0",
   "description": "Unified Coding Dashboard",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
