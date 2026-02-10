@@ -23,11 +23,15 @@
         <div class="search-section">
             <div class="input-group">
                 <label>🟡 LeetCode</label>
-                <input type="text" id="lcUsername" placeholder="LeetCode username" value="8UAkiuj84c">
+                <input type="text" id="lcUsername" placeholder="LeetCode username">
             </div>
             <div class="input-group">
                 <label>🟢 GeeksforGeeks</label>
-                <input type="text" id="gfgHandle" placeholder="GFG handle" value="yash85">
+                <input type="text" id="gfgHandle" placeholder="GFG handle">
+            </div>
+            <div class="input-group">
+                <label>🔵 Codeforces</label>
+                <input type="text" id="cfHandle" placeholder="Codeforces handle">
             </div>
             <button id="fetchBtn" class="btn-primary">
                 <span class="btn-text">Fetch All</span>
@@ -56,6 +60,13 @@
                 <div class="stat-info">
                     <span class="stat-value" id="gfgCount">--</span>
                     <span class="stat-label">GFG</span>
+                </div>
+            </div>
+            <div class="stat-card cf">
+                <span class="stat-icon">🔵</span>
+                <div class="stat-info">
+                    <span class="stat-value" id="cfCount">--</span>
+                    <span class="stat-label">Codeforces</span>
                 </div>
             </div>
         </div>
@@ -110,11 +121,13 @@
         const fetchBtn = document.getElementById('fetchBtn');
         const lcUsername = document.getElementById('lcUsername');
         const gfgHandle = document.getElementById('gfgHandle');
+        const cfHandle = document.getElementById('cfHandle');
         const combinedSubmissions = document.getElementById('combinedSubmissions');
         const languageBars = document.getElementById('languageBars');
         const totalSolvedEl = document.getElementById('totalSolved');
         const lcCountEl = document.getElementById('lcCount');
         const gfgCountEl = document.getElementById('gfgCount');
+        const cfCountEl = document.getElementById('cfCount');
 
         // Normalize language names to handle variations
         function normalizeLang(lang) {
@@ -164,8 +177,17 @@
             combinedSubmissions.innerHTML = '<div class="loading"><span class="spinner"></span> Loading...</div>';
             languageBars.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
 
+            // Reset AI analysis when fetching new data
+            aiContent.innerHTML = `
+                <div class="ai-empty-state">
+                    <span class="ai-icon">🧠</span>
+                    <p>Click "Get AI Insights" after fetching your data</p>
+                    <p class="ai-subtext">Powered by Backboard.io AI</p>
+                </div>
+            `;
+
             let allSubmissions = [];
-            let lcTotal = 0, gfgTotal = 0;
+            let lcTotal = 0, gfgTotal = 0, cfTotal = 0;
             let combinedLanguages = {};
 
             // Fetch LeetCode
@@ -235,10 +257,39 @@
                 }
             }
 
+            // Fetch Codeforces
+            const cfUser = cfHandle.value.trim();
+            if (cfUser) {
+                try {
+                    const cfData = await fetchCodeforcesSubmissions(cfUser);
+                    cfTotal = cfData.totalSolved || 0;
+
+                    // Add language stats
+                    Object.entries(cfData.languageStats || {}).forEach(([lang, count]) => {
+                        const name = normalizeLang(lang);
+                        combinedLanguages[name] = (combinedLanguages[name] || 0) + count;
+                    });
+
+                    // Add recent submissions
+                    (cfData.recentSubmissions || []).forEach(sub => {
+                        allSubmissions.push({
+                            platform: 'codeforces',
+                            title: sub.name,
+                            timestamp: sub.timestamp * 1000,
+                            link: `https://codeforces.com/problemset/problem/${sub.contestId}/${sub.index}`,
+                            language: sub.language || 'unknown'
+                        });
+                    });
+                } catch (error) {
+                    console.error('CF Error:', error);
+                }
+            }
+
             // Update stats
             lcCountEl.textContent = lcTotal;
             gfgCountEl.textContent = gfgTotal;
-            totalSolvedEl.textContent = lcTotal + gfgTotal;
+            cfCountEl.textContent = cfTotal;
+            totalSolvedEl.textContent = lcTotal + gfgTotal + cfTotal;
 
             // Sort and render
             allSubmissions.sort((a, b) => b.timestamp - a.timestamp);
@@ -254,7 +305,7 @@
                 combinedSubmissions.innerHTML = `<div class="empty-state"><p>No submissions found</p></div>`;
                 return;
             }
-            const platformIcons = { leetcode: '🟡', gfg: '🟢' };
+            const platformIcons = { leetcode: '🟡', gfg: '🟢', codeforces: '🔵' };
             const langColors = {
                 'Python': '#3572A5',
                 'C++': '#f34b7d',
@@ -340,6 +391,7 @@
             totalSolved: 0,
             leetcode: 0,
             gfg: 0,
+            codeforces: 0,
             languages: '',
             recentSubmissions: ''
         };
@@ -352,6 +404,7 @@
                 currentStats.totalSolved = parseInt(totalSolvedEl.textContent) || 0;
                 currentStats.leetcode = parseInt(lcCountEl.textContent) || 0;
                 currentStats.gfg = parseInt(gfgCountEl.textContent) || 0;
+                currentStats.codeforces = parseInt(cfCountEl.textContent) || 0;
 
                 // Get languages from rendered bars
                 const langItems = document.querySelectorAll('.lang-bar-item');
@@ -431,10 +484,55 @@
         });
 
         function renderAIAnalysis(analysis) {
-            const { summary, strengths, improvements, suggestions } = analysis;
+            const { tier_assessment, summary, strengths, improvements, suggestions, roadmap } = analysis;
+
+            // Build roadmap HTML if available
+            let roadmapHTML = '';
+            if (roadmap) {
+                const weeks = ['week1', 'week2', 'week3', 'week4'];
+                roadmapHTML = `
+                    <div class="ai-roadmap">
+                        <h4>🗺️ Your 4-Week Roadmap</h4>
+                        <div class="roadmap-timeline">
+                            ${weeks.map((week, i) => {
+                    const w = roadmap[week];
+                    if (!w) return '';
+                    return `
+                                    <div class="roadmap-week" style="animation-delay: ${i * 0.15}s">
+                                        <div class="week-header">
+                                            <span class="week-number">Week ${i + 1}</span>
+                                            <span class="week-focus">${w.focus || 'Practice'}</span>
+                                        </div>
+                                        <div class="week-details">
+                                            <p class="week-problems">📝 ${w.problems || 'Solve problems daily'}</p>
+                                            <p class="week-goal">🎯 ${w.goal || 'Complete weekly target'}</p>
+                                        </div>
+                                    </div>
+                                `;
+                }).join('')}
+                        </div>
+                        ${roadmap.monthly_target ? `
+                            <div class="monthly-target">
+                                <span class="target-icon">🏆</span>
+                                <div class="target-text">
+                                    <strong>Monthly Target:</strong>
+                                    <p>${roadmap.monthly_target}</p>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
 
             aiContent.innerHTML = `
                 <div class="ai-result">
+                    ${tier_assessment ? `
+                        <div class="tier-badge">
+                            <span class="tier-icon">🏅</span>
+                            <span class="tier-text">${tier_assessment}</span>
+                        </div>
+                    ` : ''}
+                    
                     <div class="ai-summary">
                         <h3>📊 Performance Summary</h3>
                         <p>${summary || 'Analysis complete!'}</p>
@@ -467,6 +565,8 @@
                             `).join('') || '<div class="suggestion-item"><p>Keep up the great work!</p></div>'}
                         </div>
                     </div>
+                    
+                    ${roadmapHTML}
                 </div>
             `;
         }

@@ -225,6 +225,69 @@ async function fetchGFGSubmissions(handle) {
     }
 }
 
+// Fetch Codeforces Submissions
+async function fetchCodeforcesSubmissions(handle) {
+    const endpoint = `http://localhost:3000/api/codeforces/${handle}`;
+
+    try {
+        const response = await fetch(endpoint);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.status !== 'OK') {
+            throw new Error(data.comment || 'Codeforces API error');
+        }
+
+        // Process submissions to get unique solved problems and language stats
+        const submissions = data.result || [];
+        const solvedProblems = new Map(); // Map to track unique solved problems
+        const languageStats = {};
+        const recentSubmissions = [];
+
+        submissions.forEach(sub => {
+            // Only count accepted (OK) verdicts
+            if (sub.verdict === 'OK') {
+                const problemKey = `${sub.problem.contestId}-${sub.problem.index}`;
+
+                // Track unique solved problems
+                if (!solvedProblems.has(problemKey)) {
+                    solvedProblems.set(problemKey, {
+                        name: sub.problem.name,
+                        contestId: sub.problem.contestId,
+                        index: sub.problem.index,
+                        rating: sub.problem.rating,
+                        tags: sub.problem.tags,
+                        language: sub.programmingLanguage,
+                        timestamp: sub.creationTimeSeconds
+                    });
+
+                    // Count language usage
+                    const lang = sub.programmingLanguage;
+                    languageStats[lang] = (languageStats[lang] || 0) + 1;
+                }
+            }
+        });
+
+        // Get recent submissions (up to 15 most recent accepted)
+        const sortedProblems = Array.from(solvedProblems.values())
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 15);
+
+        return {
+            totalSolved: solvedProblems.size,
+            languageStats: languageStats,
+            recentSubmissions: sortedProblems
+        };
+    } catch (error) {
+        console.error('Error fetching Codeforces submissions:', error);
+        throw error;
+    }
+}
+
 // Example usage
 async function displayRecentSubmissions(username) {
     try {

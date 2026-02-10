@@ -73,6 +73,26 @@ app.post('/api/gfg', async (req, res) => {
     }
 });
 
+// Codeforces API endpoint
+app.get('/api/codeforces/:handle', async (req, res) => {
+    const { handle } = req.params;
+    console.log('Codeforces API called for:', handle);
+    try {
+        const response = await fetch(`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=1000`);
+        const data = await response.json();
+
+        if (data.status !== 'OK') {
+            throw new Error(data.comment || 'Codeforces API error');
+        }
+
+        console.log('Codeforces response received');
+        res.json(data);
+    } catch (error) {
+        console.error('Codeforces API Error:', error);
+        res.status(500).json({ error: 'Failed to fetch from Codeforces', message: error.message });
+    }
+});
+
 // AI Analysis endpoint using Backboard.io with Cohere
 app.post('/api/analyze', async (req, res) => {
     console.log('AI Analysis requested with:', req.body);
@@ -84,13 +104,48 @@ app.post('/api/analyze', async (req, res) => {
         if (!assistantId) {
             const assistant = await backboardClient.createAssistant({
                 name: 'Coding Performance Analyst',
-                system_prompt: `You are a coding performance analyzer. Analyze user coding statistics and provide feedback in JSON format with these keys:
-- "summary": Brief 2-3 sentence assessment of their performance
-- "strengths": Array of 3 positive points
-- "improvements": Array of 4 areas that need work
-- "suggestions": Array of 4 specific actionable recommendations
+                system_prompt: `You are a Senior Technical Auditor and Career Coach. Your first task is to determine the user's "Mastery Tier" based on their Total Solved Problems (TSP):
 
-Always respond with valid JSON only.`
+TIER 0 (0-100): Novice. Focus on consistency and syntax.
+
+TIER 1 (101-500): Practitioner. Focus on data structures.
+
+TIER 2 (501-1500): Specialist. Focus on pattern recognition and Mediums.
+
+TIER 3 (1501-4000): Expert. Focus on optimization and Hard problems.
+
+TIER 4 (4001+): Elite. Focus on niche algorithms and contest performance.
+
+MANDATORY RULES:
+
+SCALE YOUR FEEDBACK: A Tier 1 user should be praised for 200 problems. A Tier 3 user should be told 200 problems is a "slow week."
+
+RELATIVE FOCUS: Analyze the ratio of Easy:Medium:Hard. If a Tier 3 user has 90% Easy problems, call it "statistically insignificant growth."
+
+NO BLUNDERS: Acknowledge the exact numbers provided in the user data.
+
+Response Format (Strict JSON):
+
+"tier_assessment": A 1-sentence classification (e.g., "User is a Tier 3 Expert with high GFG volume").
+
+"summary": 3-6 sentences. Be brutally honest relative to their Tier.
+
+"strengths": Array of 3 points.
+
+"improvements": Array of 4 critical weaknesses.
+
+"suggestions": Array of 4 tier-appropriate actionable steps.
+
+"roadmap": An object with keys week1, week2, week3, week4, and monthly_target. Each week should have three string properties:
+  - focus: The topic to focus on (e.g. "Arrays", "Dynamic Programming", "Graph BFS/DFS")
+  - problems: Number and type of problems to solve (e.g. "15 Medium array problems")
+  - goal: Specific milestone to achieve (e.g. "Master two-pointer technique")
+  
+The monthly_target should be a string describing the overall goal for the month.
+
+The roadmap must be SPECIFIC to their tier and current stats.
+
+Output valid JSON only.`
             });
             assistantId = assistant.assistantId;
             console.log('Created assistant:', assistantId);
@@ -101,17 +156,28 @@ Always respond with valid JSON only.`
         threadId = thread.threadId;
         console.log('Created thread:', threadId);
 
-        // Build the analysis prompt
+        // Build the analysis prompt dynamically based on available platforms
+        let platformStats = [];
+        if (stats.leetcode > 0) platformStats.push(`- LeetCode Problems: ${stats.leetcode}`);
+        if (stats.gfg > 0) platformStats.push(`- GeeksforGeeks Problems: ${stats.gfg}`);
+        if (stats.codeforces > 0) platformStats.push(`- Codeforces Problems: ${stats.codeforces}`);
+
+        const platformsUsed = [];
+        if (stats.leetcode > 0) platformsUsed.push('LeetCode');
+        if (stats.gfg > 0) platformsUsed.push('GFG');
+        if (stats.codeforces > 0) platformsUsed.push('Codeforces');
+
         const analysisPrompt = `Analyze this coder's performance and give brutally honest feedback:
+
+PLATFORMS USED: ${platformsUsed.length > 0 ? platformsUsed.join(', ') : 'None'}
 
 STATS:
 - Total Problems Solved: ${stats.totalSolved}
-- LeetCode Problems: ${stats.leetcode}
-- GeeksforGeeks Problems: ${stats.gfg}
+${platformStats.join('\n')}
 - Languages Used: ${stats.languages}
 - Recent Submissions: ${stats.recentSubmissions}
 
-Based on these numbers, identify their weaknesses, what topics they're likely struggling with, and what they NEED to focus on. Don't be nice - be HELPFUL by being HONEST.
+Based on these numbers, identify their weaknesses, what topics they're likely struggling with, and what topics they NEED to focus on. Don't be nice - be HELPFUL by being HONEST.
 
 Respond ONLY with valid JSON in the format specified.`;
 
@@ -135,6 +201,7 @@ Respond ONLY with valid JSON in the format specified.`;
                 jsonStr = jsonMatch[1].trim();
             }
             analysis = JSON.parse(jsonStr);
+            console.log('Parsed analysis - roadmap present:', !!analysis.roadmap);
         } catch (parseError) {
             console.error('Failed to parse AI response as JSON:', parseError);
             // Create a structured response from the text
@@ -143,6 +210,18 @@ Respond ONLY with valid JSON in the format specified.`;
                 strengths: ['Attempting to practice coding'],
                 improvements: ['Need more consistent practice', 'Should increase problem count', 'Work on variety of topics'],
                 suggestions: ['Solve at least 3 problems daily', 'Focus on Data Structures', 'Practice more Medium difficulty problems', 'Review your weak topics']
+            };
+        }
+
+        // Ensure roadmap exists - provide default if AI didn't generate one
+        if (!analysis.roadmap) {
+            console.log('No roadmap in AI response, adding default roadmap');
+            analysis.roadmap = {
+                week1: { focus: 'Arrays & Strings', problems: '10-15 Easy problems', goal: 'Build consistency with daily practice' },
+                week2: { focus: 'Hash Maps & Sets', problems: '10-12 Easy/Medium problems', goal: 'Master hash-based solutions' },
+                week3: { focus: 'Two Pointers & Sliding Window', problems: '10-15 Medium problems', goal: 'Learn pattern recognition' },
+                week4: { focus: 'Review & Mixed Practice', problems: '15-20 Mixed difficulty', goal: 'Consolidate all learned patterns' },
+                monthly_target: 'Complete 50+ problems and solidify fundamental problem-solving patterns'
             };
         }
 
